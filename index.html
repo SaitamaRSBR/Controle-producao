@@ -121,47 +121,56 @@
 
             linhas.forEach(linha => {
                 const upper = linha.toUpperCase();
-                
-                // Define o tipo atual se encontrar a palavra chave
+
                 if (upper.includes('PRÉ MONT') || upper.includes('SITE')) {
                     tipoAtual = 'PRÉ MONT';
                 } else if (upper.includes('CNPJ')) {
                     tipoAtual = 'CNPJ';
                 }
 
-                // Extrai modelo e quantidade considerando vários formatos de texto colado
-                // Procura por números isolados ou entre parênteses no final da linha
-                let modelo = '';
-                let quantidade = '1';
-
-                // Tenta formato "Modelo [espaço] Quantidade"
-                const matchEspaco = linha.match(/^(.*?)\s+(\d+)$/);
-                // Tenta formato "Modelo (Quantidade ou Código)"
-                const matchParenteses = linha.match(/^(.*?)\s*\((\d+)\)$/);
-
-                if (matchEspaco && !upper.includes('AGO') && !upper.includes('QUI')) {
-                    modelo = matchEspaco[1].trim();
-                    quantidade = matchEspaco[2].trim();
-                } else if (matchParenteses && !upper.includes('AGO') && !upper.includes('QUI')) {
-                    modelo = matchParenteses[1].trim();
-                    quantidade = matchParenteses[2].trim();
-                } else if (!upper.includes('AGO') && !upper.includes('QUI') && linha.length > 2) {
-                    // Se for apenas texto sem número explícito na mesma linha, assume quantidade 1 ou pula
+                if (upper.includes('AGO') || upper.includes('QUI')) {
                     return;
                 }
 
-                if (modelo.length > 1) {
-                    // Limpa palavras indesejadas do tipo na frente do modelo
-                    modelo = modelo.replace(/^(CNPJ|SITE\/PRÉ MONT)\s*/i, '').trim();
-                    if (modelo.length > 0) {
-                        itens.push({
-                            modelo: modelo,
-                            quantidade: quantidade,
-                            categoria: determinarCategoria(modelo),
-                            tipo: tipoAtual
-                        });
-                        adicionados++;
+                let modelo = '';
+                let quantidade = '1';
+
+                const matchEspaco = linha.match(/^(.*?)\s+(\d+)$/);
+                const matchParenteses = linha.match(/^(.*?)\s*\((\d+)\)$/);
+
+                if (matchEspaco) {
+                    modelo = matchEspaco[1].trim();
+                    quantidade = matchEspaco[2].trim();
+                } else if (matchParenteses) {
+                    let prefixo = matchParenteses[1].trim();
+                    let numero = matchParenteses[2].trim();
+
+                    if (prefixo.toUpperCase().includes('SITE') || prefixo.toUpperCase().includes('PRÉ MONT')) {
+                        modelo = 'Pedido ' + numero;
+                        tipoAtual = 'PRÉ MONT';
+                    } else if (prefixo.toUpperCase().includes('CNPJ')) {
+                        modelo = 'CNPJ ' + numero;
+                        tipoAtual = 'CNPJ';
+                    } else {
+                        modelo = prefixo + ' (' + numero + ')';
                     }
+                } else {
+                    modelo = linha;
+                }
+
+                // Garante que o modelo não fique vazio
+                if (!modelo || modelo === 'SITE/PRÉ MONT' || modelo === 'CNPJ') {
+                    modelo = linha;
+                }
+
+                if (modelo.length > 0) {
+                    itens.push({
+                        modelo: modelo,
+                        quantidade: quantidade,
+                        categoria: determinarCategoria(modelo),
+                        tipo: tipoAtual
+                    });
+                    adicionados++;
                 }
             });
 
