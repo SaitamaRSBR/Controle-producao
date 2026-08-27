@@ -10,11 +10,12 @@
         body { font-family: Arial, sans-serif; background: #f4f4f9; margin: 0; padding: 15px; }
         h2 { color: #333; text-align: center; }
         .card { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 15px; }
-        input, select, button { width: 100%; padding: 10px; margin-top: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
+        input, select, textarea, button { width: 100%; padding: 10px; margin-top: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
+        textarea { resize: vertical; height: 100px; font-family: monospace; font-size: 12px; }
         button { background: #007BFF; color: white; border: none; font-weight: bold; cursor: pointer; }
         button:active { background: #0056b3; }
         .btn-foto { background: #28a745; margin-bottom: 5px; }
-        .btn-foto:active { background: #1e7e34; }
+        .btn-lote { background: #17a2b8; margin-top: 5px; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 13px; }
         th { background: #f8f9fa; }
@@ -30,13 +31,21 @@
     <!-- Botão de Captura por Câmera / Galeria -->
     <div class="card">
         <h3>📷 Ler Planilha via Câmera ou Foto</h3>
-        <p style="font-size: 12px; color: #666; margin: 0 0 8px 0;">Tire uma foto nítida da folha de controle ou selecione da galeria.</p>
+        <p style="font-size: 12px; color: #666; margin: 0 0 8px 0;">Tire uma foto nítida da folha de controle.</p>
         <input type="file" id="arquivo-foto" accept="image/*" capture="environment" style="display:none;" onchange="processarFoto(event)">
         <button class="btn-foto" onclick="document.getElementById('arquivo-foto').click()">Tirar Foto / Escolher Imagem</button>
         <div id="status-ocr"></div>
     </div>
 
-    <!-- Cadastro Manual (Caso precise corrigir algum ajuste) -->
+    <!-- Caixa de Visualização e Edição do Texto Lido -->
+    <div class="card">
+        <h3>📄 Texto Extraído da Foto</h3>
+        <p style="font-size: 12px; color: #666; margin: 0 0 8px 0;">O texto lido aparecerá aqui. Você pode conferir ou reprocessar se necessário:</p>
+        <textarea id="texto-lote" placeholder="O texto lido da foto aparecerá aqui..."></textarea>
+        <button class="btn-lote" onclick="processarTextoCaixa()">Processar Texto da Caixa</button>
+    </div>
+
+    <!-- Cadastro Individual -->
     <div class="card">
         <h3>Cadastro Individual</h3>
         <label>Modelo:</label>
@@ -116,10 +125,9 @@
             if (!arquivo) return;
 
             const statusDiv = document.getElementById('status-ocr');
-            statusDiv.innerText = 'Carregando motor de leitura e processando imagem...';
+            statusDiv.innerText = 'Carregando motor e lendo imagem...';
 
             try {
-                // Executa a leitura OCR em português diretamente no dispositivo
                 const resultado = await Tesseract.recognize(
                     arquivo,
                     'por',
@@ -127,64 +135,96 @@
                         logger: m => {
                             if (m.status === 'recognizing text') {
                                 let progresso = Math.round(m.progress * 100);
-                                statusDiv.innerText = `Lendo texto da folha: ${progresso}%`;
+                                statusDiv.innerText = `Lendo texto: ${progresso}%`;
                             }
                         } 
                     }
                 );
 
                 const textoExtraido = resultado.data.text;
-                statusDiv.innerText = 'Leitura concluída! Organizando os dados...';
+                document.getElementById('texto-lote').value = textoExtraido;
+                statusDiv.innerText = 'Leitura concluída!';
 
                 analisarTextoOCR(textoExtraido);
 
-                setTimeout(() => {
-                    statusDiv.innerText = '';
-                }, 3000);
+                setTimeout(() => { statusDiv.innerText = ''; }, 3000);
 
             } catch (erro) {
                 console.error(erro);
-                statusDiv.innerText = 'Erro ao processar a imagem. Tente tirar uma foto mais clara.';
+                statusDiv.innerText = 'Erro ao processar a imagem.';
             }
+        }
+
+        function processarTextoCaixa() {
+            const texto = document.getElementById('texto-lote').value.trim();
+            if (!texto) {
+                alert('A caixa de texto está vazia!');
+                return;
+            }
+            analisarTextoOCR(texto);
         }
 
         function analisarTextoOCR(texto) {
             const linhas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-            let tipoAtual = 'CNPJ'; // Padrão inicial
+            let tipoAtual = 'CNPJ';
+            let novosAdicionados = 0;
 
-            linhas.forEach(linha => {
-                const upper = linha.toUpperCase();
-                
-                // Identifica se a linha indica o bloco de PRÉ MONT ou CNPJ
+            for (let i = 0; i < linhas.length; i++) {
+                let linha = linhas[i];
+                let upper = linha.toUpperCase();
+
                 if (upper.includes('PRÉ MONT') || upper.includes('SITE/PRÉ MONT')) {
                     tipoAtual = 'PRÉ MONT';
-                    return;
+                    continue;
                 } else if (upper.includes('CNPJ')) {
                     tipoAtual = 'CNPJ';
-                    return;
+                    continue;
                 }
 
-                // Identifica linhas que possuem texto do modelo seguidos de um número (quantidade)
-                const match = linha.match(/^(.*?)\s+(\d+)$/);
+                if (upper.includes('QUI') || upper.includes('AGO') || upper.includes('DATA')) {
+                    continue;
+                }
+
+                // Tenta pegar linha única (ex: "BARRA/VERONA 4")
+                let match = linha.match(/^(.*?)\s+(\d+)$/);
                 if (match) {
                     let modelo = match[1].trim();
                     let quantidade = match[2].trim();
-
-                    // Ignora linhas irrelevantes (cabeçalhos de dias da semana, datas, etc.)
-                    if (modelo.length > 1 && !upper.includes('QUI') && !upper.includes('AGO') && !upper.includes('DATA')) {
-                        const categoria = determinarCategoria(modelo);
+                    if (modelo.length > 0) {
                         itens.push({
                             modelo: modelo,
                             quantidade: quantidade,
-                            categoria: categoria,
+                            categoria: determinarCategoria(modelo),
                             tipo: tipoAtual
                         });
+                        novosAdicionados++;
+                        continue;
                     }
                 }
-            });
+
+                // Tenta pegar se o modelo está na linha atual e a quantidade na linha seguinte
+                if (i + 1 < linhas.length) {
+                    let proximaLinha = linhas[i + 1].trim();
+                    if (/^\d+$/.test(proximaLinha)) {
+                        let modelo = linha.replace(/^(Qui|ago|\d+\/ago)\s*/i, '').trim();
+                        let quantidade = proximaLinha;
+                        if (modelo.length > 1 && !modelo.toUpperCase().includes('CNPJ')) {
+                            itens.push({
+                                modelo: modelo,
+                                quantidade: quantidade,
+                                categoria: determinarCategoria(modelo),
+                                tipo: tipoAtual
+                            });
+                            novosAdicionados++;
+                            i++; // Pula a linha da quantidade
+                            continue;
+                        }
+                    }
+                }
+            }
 
             salvar();
-            alert('Planilha importada com sucesso pela foto!');
+            alert(`${novosAdicionados} itens importados com sucesso para a tabela!`);
         }
 
         function removerItem(index) {
