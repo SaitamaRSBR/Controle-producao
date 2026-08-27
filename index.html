@@ -29,7 +29,7 @@
     <div class="card">
         <h3>📋 Importação Rápida (Google Lens)</h3>
         <p style="font-size: 12px; color: #666; margin: 0 0 5px 0;">1. Use o Google Lens na foto da planilha e copie o texto.<br>2. Cole abaixo e clique em processar.</p>
-        <textarea id="texto-lote" placeholder="Cole aqui os dados copiados (Ex: Modelo, Quantidade, CNPJ/PRÉ MONT)..."></textarea>
+        <textarea id="texto-lote" placeholder="Cole aqui os dados copiados..."></textarea>
         <button class="btn-lote" onclick="processarTextoLote()">Processar e Adicionar à Tabela</button>
     </div>
 
@@ -122,21 +122,38 @@
             linhas.forEach(linha => {
                 const upper = linha.toUpperCase();
                 
-                // Detecta se a linha define o tipo
+                // Define o tipo atual se encontrar a palavra chave
                 if (upper.includes('PRÉ MONT') || upper.includes('SITE')) {
                     tipoAtual = 'PRÉ MONT';
-                    return;
                 } else if (upper.includes('CNPJ')) {
                     tipoAtual = 'CNPJ';
+                }
+
+                // Extrai modelo e quantidade considerando vários formatos de texto colado
+                // Procura por números isolados ou entre parênteses no final da linha
+                let modelo = '';
+                let quantidade = '1';
+
+                // Tenta formato "Modelo [espaço] Quantidade"
+                const matchEspaco = linha.match(/^(.*?)\s+(\d+)$/);
+                // Tenta formato "Modelo (Quantidade ou Código)"
+                const matchParenteses = linha.match(/^(.*?)\s*\((\d+)\)$/);
+
+                if (matchEspaco && !upper.includes('AGO') && !upper.includes('QUI')) {
+                    modelo = matchEspaco[1].trim();
+                    quantidade = matchEspaco[2].trim();
+                } else if (matchParenteses && !upper.includes('AGO') && !upper.includes('QUI')) {
+                    modelo = matchParenteses[1].trim();
+                    quantidade = matchParenteses[2].trim();
+                } else if (!upper.includes('AGO') && !upper.includes('QUI') && linha.length > 2) {
+                    // Se for apenas texto sem número explícito na mesma linha, assume quantidade 1 ou pula
                     return;
                 }
 
-                // Tenta extrair modelo e quantidade se estiverem na mesma linha
-                const match = linha.match(/^(.*?)\s+(\d+)$/);
-                if (match) {
-                    let modelo = match[1].trim();
-                    let quantidade = match[2].trim();
-                    if (modelo.length > 1 && !upper.includes('AGO') && !upper.includes('QUI')) {
+                if (modelo.length > 1) {
+                    // Limpa palavras indesejadas do tipo na frente do modelo
+                    modelo = modelo.replace(/^(CNPJ|SITE\/PRÉ MONT)\s*/i, '').trim();
+                    if (modelo.length > 0) {
                         itens.push({
                             modelo: modelo,
                             quantidade: quantidade,
