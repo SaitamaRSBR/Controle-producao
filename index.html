@@ -4,45 +4,33 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Controle de Produção - Southbike</title>
-    <!-- Biblioteca Tesseract.js para OCR direto no navegador -->
-    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <style>
         body { font-family: Arial, sans-serif; background: #f4f4f9; margin: 0; padding: 15px; }
         h2 { color: #333; text-align: center; }
         .card { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 15px; }
         input, select, textarea, button { width: 100%; padding: 10px; margin-top: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
-        textarea { resize: vertical; height: 100px; font-family: monospace; font-size: 12px; }
+        textarea { resize: vertical; height: 120px; font-family: monospace; font-size: 13px; }
         button { background: #007BFF; color: white; border: none; font-weight: bold; cursor: pointer; }
         button:active { background: #0056b3; }
-        .btn-foto { background: #28a745; margin-bottom: 5px; }
-        .btn-lote { background: #17a2b8; margin-top: 5px; }
+        .btn-lote { background: #28a745; margin-top: 8px; }
+        .btn-lote:active { background: #1e7e34; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 13px; }
         th { background: #f8f9fa; }
         .tag-aco { background: #e3f2fd; color: #0d47a1; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
         .tag-aluminio { background: #e8f5e9; color: #1b5e20; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-        #status-ocr { font-size: 13px; color: #d9534f; margin-top: 8px; text-align: center; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <h2>Controle de Produção</h2>
 
-    <!-- Botão de Captura por Câmera / Galeria -->
+    <!-- Importação Rápida via Google Lens / Texto -->
     <div class="card">
-        <h3>📷 Ler Planilha via Câmera ou Foto</h3>
-        <p style="font-size: 12px; color: #666; margin: 0 0 8px 0;">Tire uma foto nítida da folha de controle.</p>
-        <input type="file" id="arquivo-foto" accept="image/*" capture="environment" style="display:none;" onchange="processarFoto(event)">
-        <button class="btn-foto" onclick="document.getElementById('arquivo-foto').click()">Tirar Foto / Escolher Imagem</button>
-        <div id="status-ocr"></div>
-    </div>
-
-    <!-- Caixa de Visualização e Edição do Texto Lido -->
-    <div class="card">
-        <h3>📄 Texto Extraído da Foto</h3>
-        <p style="font-size: 12px; color: #666; margin: 0 0 8px 0;">O texto lido aparecerá aqui. Você pode conferir ou reprocessar se necessário:</p>
-        <textarea id="texto-lote" placeholder="O texto lido da foto aparecerá aqui..."></textarea>
-        <button class="btn-lote" onclick="processarTextoCaixa()">Processar Texto da Caixa</button>
+        <h3>📋 Importação Rápida (Google Lens)</h3>
+        <p style="font-size: 12px; color: #666; margin: 0 0 5px 0;">1. Use o Google Lens na foto da planilha e copie o texto.<br>2. Cole abaixo e clique em processar.</p>
+        <textarea id="texto-lote" placeholder="Cole aqui os dados copiados (Ex: Modelo, Quantidade, CNPJ/PRÉ MONT)..."></textarea>
+        <button class="btn-lote" onclick="processarTextoLote()">Processar e Adicionar à Tabela</button>
     </div>
 
     <!-- Cadastro Individual -->
@@ -120,111 +108,49 @@
             salvar();
         }
 
-        async function processarFoto(event) {
-            const arquivo = event.target.files[0];
-            if (!arquivo) return;
-
-            const statusDiv = document.getElementById('status-ocr');
-            statusDiv.innerText = 'Carregando motor e lendo imagem...';
-
-            try {
-                const resultado = await Tesseract.recognize(
-                    arquivo,
-                    'por',
-                    { 
-                        logger: m => {
-                            if (m.status === 'recognizing text') {
-                                let progresso = Math.round(m.progress * 100);
-                                statusDiv.innerText = `Lendo texto: ${progresso}%`;
-                            }
-                        } 
-                    }
-                );
-
-                const textoExtraido = resultado.data.text;
-                document.getElementById('texto-lote').value = textoExtraido;
-                statusDiv.innerText = 'Leitura concluída!';
-
-                analisarTextoOCR(textoExtraido);
-
-                setTimeout(() => { statusDiv.innerText = ''; }, 3000);
-
-            } catch (erro) {
-                console.error(erro);
-                statusDiv.innerText = 'Erro ao processar a imagem.';
-            }
-        }
-
-        function processarTextoCaixa() {
+        function processarTextoLote() {
             const texto = document.getElementById('texto-lote').value.trim();
             if (!texto) {
-                alert('A caixa de texto está vazia!');
+                alert('Cole o texto copiado na caixa acima!');
                 return;
             }
-            analisarTextoOCR(texto);
-        }
 
-        function analisarTextoOCR(texto) {
             const linhas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+            let adicionados = 0;
             let tipoAtual = 'CNPJ';
-            let novosAdicionados = 0;
 
-            for (let i = 0; i < linhas.length; i++) {
-                let linha = linhas[i];
-                let upper = linha.toUpperCase();
-
-                if (upper.includes('PRÉ MONT') || upper.includes('SITE/PRÉ MONT')) {
+            linhas.forEach(linha => {
+                const upper = linha.toUpperCase();
+                
+                // Detecta se a linha define o tipo
+                if (upper.includes('PRÉ MONT') || upper.includes('SITE')) {
                     tipoAtual = 'PRÉ MONT';
-                    continue;
+                    return;
                 } else if (upper.includes('CNPJ')) {
                     tipoAtual = 'CNPJ';
-                    continue;
+                    return;
                 }
 
-                if (upper.includes('QUI') || upper.includes('AGO') || upper.includes('DATA')) {
-                    continue;
-                }
-
-                // Tenta pegar linha única (ex: "BARRA/VERONA 4")
-                let match = linha.match(/^(.*?)\s+(\d+)$/);
+                // Tenta extrair modelo e quantidade se estiverem na mesma linha
+                const match = linha.match(/^(.*?)\s+(\d+)$/);
                 if (match) {
                     let modelo = match[1].trim();
                     let quantidade = match[2].trim();
-                    if (modelo.length > 0) {
+                    if (modelo.length > 1 && !upper.includes('AGO') && !upper.includes('QUI')) {
                         itens.push({
                             modelo: modelo,
                             quantidade: quantidade,
                             categoria: determinarCategoria(modelo),
                             tipo: tipoAtual
                         });
-                        novosAdicionados++;
-                        continue;
+                        adicionados++;
                     }
                 }
-
-                // Tenta pegar se o modelo está na linha atual e a quantidade na linha seguinte
-                if (i + 1 < linhas.length) {
-                    let proximaLinha = linhas[i + 1].trim();
-                    if (/^\d+$/.test(proximaLinha)) {
-                        let modelo = linha.replace(/^(Qui|ago|\d+\/ago)\s*/i, '').trim();
-                        let quantidade = proximaLinha;
-                        if (modelo.length > 1 && !modelo.toUpperCase().includes('CNPJ')) {
-                            itens.push({
-                                modelo: modelo,
-                                quantidade: quantidade,
-                                categoria: determinarCategoria(modelo),
-                                tipo: tipoAtual
-                            });
-                            novosAdicionados++;
-                            i++; // Pula a linha da quantidade
-                            continue;
-                        }
-                    }
-                }
-            }
+            });
 
             salvar();
-            alert(`${novosAdicionados} itens importados com sucesso para a tabela!`);
+            document.getElementById('texto-lote').value = '';
+            alert(`${adicionados} itens foram importados com sucesso para a tabela!`);
         }
 
         function removerItem(index) {
